@@ -20,6 +20,7 @@ public class OrderItem
 
     [Column("batch_id")]
     public Guid BatchId { get; set; } // Lô xuất theo FIFO
+    public Batch? Batch { get; set; }
 
     [Column("quantity")]
     public int Quantity { get; set; }

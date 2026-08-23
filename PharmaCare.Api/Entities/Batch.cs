@@ -19,10 +19,10 @@ public class Batch
     public string BatchNumber { get; set; } = string.Empty; // Mã lô: BT202608
 
     [Column("mfg_date")]
-    public DateTime MfgDate { get; set; } // Ngày sản xuất
+    public DateOnly MfgDate { get; set; } // Ngày sản xuất
 
     [Column("expiry_date")]
-    public DateTime ExpiryDate { get; set; } // Hạn sử dụng (Date)
+    public DateOnly ExpiryDate { get; set; } // Hạn sử dụng (Date)
 
     [Column("cost_price")]
     public decimal CostPrice { get; set; } // Giá vốn nhập

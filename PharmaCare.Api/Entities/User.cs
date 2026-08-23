@@ -37,4 +37,6 @@ public class User
 
     // Quan hệ
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public ICollection<UserBranch> UserBranches { get; set; } = new List<UserBranch>();
 }

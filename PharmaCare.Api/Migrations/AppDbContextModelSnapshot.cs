@@ -70,6 +70,14 @@ namespace PharmaCare.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("Action", "CreatedAt");
+
+                    b.HasIndex("EntityName", "EntityId");
+
                     b.ToTable("audit_logs");
                 });
 
@@ -87,15 +95,16 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnName("batch_number");
 
                     b.Property<decimal>("CostPrice")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("cost_price");
 
-                    b.Property<DateTime>("ExpiryDate")
-                        .HasColumnType("timestamp with time zone")
+                    b.Property<DateOnly>("ExpiryDate")
+                        .HasColumnType("date")
                         .HasColumnName("expiry_date");
 
-                    b.Property<DateTime>("MfgDate")
-                        .HasColumnType("timestamp with time zone")
+                    b.Property<DateOnly>("MfgDate")
+                        .HasColumnType("date")
                         .HasColumnName("mfg_date");
 
                     b.Property<Guid>("ProductId")
@@ -104,9 +113,15 @@ namespace PharmaCare.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProductId");
+                    b.HasIndex("ProductId", "BatchNumber")
+                        .IsUnique();
 
-                    b.ToTable("batches");
+                    b.ToTable("batches", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_batches_cost_price", "cost_price >= 0");
+
+                            t.HasCheckConstraint("CK_batches_dates", "expiry_date >= mfg_date");
+                        });
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Branch", b =>
@@ -192,13 +207,21 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("reserved_quantity");
 
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
                     b.HasKey("BranchId", "ProductId", "BatchId");
 
-                    b.HasIndex("BatchId");
+                    b.HasIndex("ProductId", "BatchId");
 
-                    b.HasIndex("ProductId");
+                    b.ToTable("branch_inventories", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_branch_inventories_quantities", "quantity_on_hand >= 0 AND reserved_quantity >= 0 AND reorder_level >= 0");
 
-                    b.ToTable("branch_inventories");
+                            t.HasCheckConstraint("CK_branch_inventories_reserved", "reserved_quantity <= quantity_on_hand");
+                        });
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Category", b =>
@@ -207,6 +230,12 @@ namespace PharmaCare.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -226,7 +255,86 @@ namespace PharmaCare.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
                     b.ToTable("categories");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.InventoryTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("BalanceAfter")
+                        .HasColumnType("integer")
+                        .HasColumnName("balance_after");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("batch_id");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("ReferenceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("reference_id");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("reference_type");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("transaction_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("BranchId", "CreatedAt");
+
+                    b.HasIndex("ProductId", "BatchId");
+
+                    b.ToTable("inventory_transactions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_inventory_transactions_balance", "balance_after >= 0");
+
+                            t.HasCheckConstraint("CK_inventory_transactions_quantity", "quantity <> 0");
+
+                            t.HasCheckConstraint("CK_inventory_transactions_type", "transaction_type IN ('IMPORT','ADJUST_IN','ADJUST_OUT','TRANSFER_IN','TRANSFER_OUT','RESERVE','RELEASE','SALE','RETURN')");
+                        });
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Order", b =>
@@ -255,7 +363,8 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnName("customer_id");
 
                     b.Property<decimal>("DiscountAmount")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("discount_amount");
 
                     b.Property<string>("OrderType")
@@ -285,8 +394,24 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("prescription_id");
 
+                    b.Property<string>("RecipientName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("recipient_name");
+
+                    b.Property<string>("RecipientPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("recipient_phone");
+
+                    b.Property<string>("ShippingAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("shipping_address");
+
                     b.Property<decimal>("ShippingFee")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("shipping_fee");
 
                     b.Property<string>("Status")
@@ -296,16 +421,28 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnName("status");
 
                     b.Property<decimal>("SubtotalBeforeVat")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("subtotal_before_vat");
 
                     b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("total_amount");
 
                     b.Property<decimal>("TotalVatAmount")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("total_vat_amount");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
                     b.Property<string>("VoucherCode")
                         .HasMaxLength(50)
@@ -317,7 +454,26 @@ namespace PharmaCare.Api.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("orders");
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("PrescriptionId");
+
+                    b.HasIndex("BranchId", "Status", "CreatedAt");
+
+                    b.ToTable("orders", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_orders_amounts", "subtotal_before_vat >= 0 AND total_vat_amount >= 0 AND shipping_fee >= 0 AND discount_amount >= 0 AND total_amount >= 0");
+
+                            t.HasCheckConstraint("CK_orders_payment_method", "payment_method IN ('COD','VIETQR','CASH_POS')");
+
+                            t.HasCheckConstraint("CK_orders_payment_status", "payment_status IN ('UNPAID','PAID','REFUNDED')");
+
+                            t.HasCheckConstraint("CK_orders_pickup", "pickup_type IN ('SHIPPING','STORE_PICKUP')");
+
+                            t.HasCheckConstraint("CK_orders_status", "status IN ('PENDING','CONFIRMED','COMPLETED','CANCELLED')");
+
+                            t.HasCheckConstraint("CK_orders_type", "order_type IN ('ONLINE','POS')");
+                        });
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.OrderItem", b =>
@@ -332,7 +488,8 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnName("batch_id");
 
                     b.Property<decimal>("LineTotal")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("line_total");
 
                     b.Property<Guid>("OrderId")
@@ -348,24 +505,152 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnName("quantity");
 
                     b.Property<decimal>("UnitPrice")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("unit_price");
 
                     b.Property<decimal>("VatAmount")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("vat_amount");
 
                     b.Property<decimal>("VatRate")
-                        .HasColumnType("numeric")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
                         .HasColumnName("vat_rate");
 
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId");
 
-                    b.HasIndex("ProductId");
+                    b.HasIndex("ProductId", "BatchId");
 
-                    b.ToTable("order_items");
+                    b.ToTable("order_items", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_order_items_amounts", "unit_price >= 0 AND vat_amount >= 0 AND line_total >= 0");
+
+                            t.HasCheckConstraint("CK_order_items_quantity", "quantity > 0");
+
+                            t.HasCheckConstraint("CK_order_items_vat_rate", "vat_rate >= 0 AND vat_rate <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.OrderStatusHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<Guid>("ChangedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("from_status");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("to_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedBy");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("order_status_histories");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.PaymentTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("ExternalReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_reference");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("transaction_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ExternalReference")
+                        .IsUnique()
+                        .HasFilter("external_reference IS NOT NULL");
+
+                    b.HasIndex("OrderId", "CreatedAt");
+
+                    b.ToTable("payment_transactions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_payment_transactions_amount", "amount > 0");
+
+                            t.HasCheckConstraint("CK_payment_transactions_method", "method IN ('COD','VIETQR','CASH_POS')");
+
+                            t.HasCheckConstraint("CK_payment_transactions_status", "status = 'SUCCEEDED'");
+
+                            t.HasCheckConstraint("CK_payment_transactions_type", "transaction_type IN ('PAYMENT','REFUND')");
+                        });
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Permission", b =>
@@ -401,6 +686,14 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
@@ -435,9 +728,66 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
                     b.HasKey("Id");
 
-                    b.ToTable("prescriptions");
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("PharmacistId");
+
+                    b.HasIndex("BranchId", "Status");
+
+                    b.ToTable("prescriptions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_prescriptions_status", "status IN ('PENDING','APPROVED','REJECTED')");
+                        });
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.PrescriptionItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("ApprovedQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("approved_quantity");
+
+                    b.Property<string>("Dosage")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("dosage");
+
+                    b.Property<string>("Instructions")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("instructions");
+
+                    b.Property<Guid>("PrescriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prescription_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("PrescriptionId", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("prescription_items", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_prescription_items_quantity", "approved_quantity > 0");
+                        });
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Product", b =>
@@ -491,11 +841,13 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnName("storage_temp");
 
                     b.Property<decimal>("UnitPrice")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("unit_price");
 
                     b.Property<decimal>("VatRate")
-                        .HasColumnType("numeric")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
                         .HasColumnName("vat_rate");
 
                     b.Property<string>("WarningText")
@@ -509,7 +861,67 @@ namespace PharmaCare.Api.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("products");
+                    b.ToTable("products", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_products_unit_price", "unit_price >= 0");
+
+                            t.HasCheckConstraint("CK_products_vat_rate", "vat_rate >= 0 AND vat_rate <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedByIp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("created_by_ip");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("ReplacedByTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("replaced_by_token_hash");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("RevokedByIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("revoked_by_ip");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("refresh_tokens");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Role", b =>
@@ -600,6 +1012,35 @@ namespace PharmaCare.Api.Migrations
                     b.ToTable("users");
                 });
 
+            modelBuilder.Entity("PharmaCare.Api.Entities.UserBranch", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
+                    b.Property<DateTimeOffset>("AssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_primary");
+
+                    b.HasKey("UserId", "BranchId");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("is_primary = TRUE");
+
+                    b.ToTable("user_branches");
+                });
+
             modelBuilder.Entity("PharmaCare.Api.Entities.UserRole", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -640,23 +1081,134 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnName("discount_type");
 
                     b.Property<decimal>("DiscountValue")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("discount_value");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<decimal?>("MaxDiscountAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("max_discount_amount");
+
                     b.Property<decimal>("MinOrderAmount")
-                        .HasColumnType("numeric")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
                         .HasColumnName("min_order_amount");
 
+                    b.Property<int>("PerCustomerLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("per_customer_limit");
+
+                    b.Property<int?>("UsageLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("usage_limit");
+
+                    b.Property<int>("UsedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("used_count");
+
+                    b.Property<DateTimeOffset>("ValidFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateTimeOffset?>("ValidUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_until");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("AssignedCustomerId");
 
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("vouchers");
+                    b.ToTable("vouchers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_vouchers_dates", "valid_until IS NULL OR valid_until > valid_from");
+
+                            t.HasCheckConstraint("CK_vouchers_limits", "per_customer_limit > 0 AND used_count >= 0 AND (usage_limit IS NULL OR usage_limit > 0)");
+
+                            t.HasCheckConstraint("CK_vouchers_percentage", "discount_type <> 'PERCENTAGE' OR discount_value <= 100");
+
+                            t.HasCheckConstraint("CK_vouchers_type", "discount_type IN ('FIXED_AMOUNT','PERCENTAGE')");
+
+                            t.HasCheckConstraint("CK_vouchers_values", "discount_value > 0 AND min_order_amount >= 0 AND (max_discount_amount IS NULL OR max_discount_amount > 0)");
+                        });
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.VoucherUsage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("discount_amount");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<DateTimeOffset?>("ReversedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reversed_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("used_at");
+
+                    b.Property<Guid>("VoucherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("voucher_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.HasIndex("VoucherId", "CustomerId", "Status");
+
+                    b.ToTable("voucher_usages", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_voucher_usages_amount", "discount_amount > 0");
+
+                            t.HasCheckConstraint("CK_voucher_usages_status", "status IN ('REDEEMED','REVERSED')");
+                        });
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.AuditLog", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Batch", b =>
@@ -664,7 +1216,7 @@ namespace PharmaCare.Api.Migrations
                     b.HasOne("PharmaCare.Api.Entities.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Product");
@@ -672,12 +1224,6 @@ namespace PharmaCare.Api.Migrations
 
             modelBuilder.Entity("PharmaCare.Api.Entities.BranchInventory", b =>
                 {
-                    b.HasOne("PharmaCare.Api.Entities.Batch", "Batch")
-                        .WithMany()
-                        .HasForeignKey("BatchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("PharmaCare.Api.Entities.Branch", "Branch")
                         .WithMany()
                         .HasForeignKey("BranchId")
@@ -690,11 +1236,90 @@ namespace PharmaCare.Api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PharmaCare.Api.Entities.Batch", "Batch")
+                        .WithMany()
+                        .HasForeignKey("ProductId", "BatchId")
+                        .HasPrincipalKey("ProductId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Batch");
 
                     b.Navigation("Branch");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.Category", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.Category", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.InventoryTransaction", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Batch", "Batch")
+                        .WithMany()
+                        .HasForeignKey("ProductId", "BatchId")
+                        .HasPrincipalKey("ProductId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.Order", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.User", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Prescription", "Prescription")
+                        .WithMany()
+                        .HasForeignKey("PrescriptionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Prescription");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.OrderItem", b =>
@@ -708,10 +1333,102 @@ namespace PharmaCare.Api.Migrations
                     b.HasOne("PharmaCare.Api.Entities.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Batch", "Batch")
+                        .WithMany()
+                        .HasForeignKey("ProductId", "BatchId")
+                        .HasPrincipalKey("ProductId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.OrderStatusHistory", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.User", "ChangedByUser")
+                        .WithMany()
+                        .HasForeignKey("ChangedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Order", "Order")
+                        .WithMany("StatusHistory")
+                        .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("ChangedByUser");
+
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.PaymentTransaction", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Order", "Order")
+                        .WithMany("Payments")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.Prescription", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.User", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.User", "Pharmacist")
+                        .WithMany()
+                        .HasForeignKey("PharmacistId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Pharmacist");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.PrescriptionItem", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.Prescription", "Prescription")
+                        .WithMany("Items")
+                        .HasForeignKey("PrescriptionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Prescription");
 
                     b.Navigation("Product");
                 });
@@ -721,10 +1438,21 @@ namespace PharmaCare.Api.Migrations
                     b.HasOne("PharmaCare.Api.Entities.Category", "Category")
                         .WithMany()
                         .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.User", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.RolePermission", b =>
@@ -746,6 +1474,25 @@ namespace PharmaCare.Api.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("PharmaCare.Api.Entities.UserBranch", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.Branch", "Branch")
+                        .WithMany("UserBranches")
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.User", "User")
+                        .WithMany("UserBranches")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("PharmaCare.Api.Entities.UserRole", b =>
                 {
                     b.HasOne("PharmaCare.Api.Entities.Role", "Role")
@@ -765,14 +1512,72 @@ namespace PharmaCare.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("PharmaCare.Api.Entities.Voucher", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.User", "AssignedCustomer")
+                        .WithMany()
+                        .HasForeignKey("AssignedCustomerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AssignedCustomer");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.VoucherUsage", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.User", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Order", "Order")
+                        .WithOne("VoucherUsage")
+                        .HasForeignKey("PharmaCare.Api.Entities.VoucherUsage", "OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PharmaCare.Api.Entities.Voucher", "Voucher")
+                        .WithMany("Usages")
+                        .HasForeignKey("VoucherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Voucher");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.Branch", b =>
+                {
+                    b.Navigation("UserBranches");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.Category", b =>
+                {
+                    b.Navigation("Children");
+                });
+
             modelBuilder.Entity("PharmaCare.Api.Entities.Order", b =>
                 {
                     b.Navigation("OrderItems");
+
+                    b.Navigation("Payments");
+
+                    b.Navigation("StatusHistory");
+
+                    b.Navigation("VoucherUsage");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Permission", b =>
                 {
                     b.Navigation("RolePermissions");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.Prescription", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Role", b =>
@@ -784,7 +1589,16 @@ namespace PharmaCare.Api.Migrations
 
             modelBuilder.Entity("PharmaCare.Api.Entities.User", b =>
                 {
+                    b.Navigation("RefreshTokens");
+
+                    b.Navigation("UserBranches");
+
                     b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.Voucher", b =>
+                {
+                    b.Navigation("Usages");
                 });
 #pragma warning restore 612, 618
         }

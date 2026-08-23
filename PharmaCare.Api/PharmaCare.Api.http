@@ -1,6 +1,30 @@
-@PharmaCare.Api_HostAddress = http://localhost:0
+@PharmaCare.Api_HostAddress = http://127.0.0.1:5080
+@accessToken = paste-access-token-here
 
-GET {{PharmaCare.Api_HostAddress}}/weatherforecast/
+POST {{PharmaCare.Api_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "customer@example.com",
+  "password": "ChangeMe123!",
+  "displayName": "Khách hàng mẫu",
+  "phone": "0900000000"
+}
+
+###
+
+POST {{PharmaCare.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@example.com",
+  "password": "ChangeMe123!"
+}
+
+###
+
+GET {{PharmaCare.Api_HostAddress}}/api/users
+Authorization: Bearer {{accessToken}}
 Accept: application/json
 
 ###

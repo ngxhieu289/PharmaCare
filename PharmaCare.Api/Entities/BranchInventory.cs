@@ -25,4 +25,7 @@ public class BranchInventory
 
     [Column("reorder_level")]
     public int ReorderLevel { get; set; } = 10; // Ngưỡng tồn thấp
+
+    [Column("version")]
+    public long Version { get; set; }
 }

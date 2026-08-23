@@ -12,6 +12,7 @@ public class AuditLog
 
     [Column("user_id")]
     public Guid UserId { get; set; }
+    public User? User { get; set; }
 
     [Required, MaxLength(50)]
     [Column("action")]

@@ -16,12 +16,15 @@ public class Order
 
     [Column("customer_id")]
     public Guid CustomerId { get; set; }
+    public User? Customer { get; set; }
 
     [Column("branch_id")]
     public Guid BranchId { get; set; }
+    public Branch? Branch { get; set; }
 
     [Column("prescription_id")]
     public Guid? PrescriptionId { get; set; }
+    public Prescription? Prescription { get; set; }
 
     [Required, MaxLength(20)]
     [Column("order_type")]
@@ -61,8 +64,49 @@ public class Order
     [Column("payment_status")]
     public string PaymentStatus { get; set; } = "UNPAID";
 
+    [MaxLength(100)]
+    [Column("recipient_name")]
+    public string? RecipientName { get; set; }
+
+    [MaxLength(20)]
+    [Column("recipient_phone")]
+    public string? RecipientPhone { get; set; }
+
+    [MaxLength(500)]
+    [Column("shipping_address")]
+    public string? ShippingAddress { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    [Column("updated_at")]
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    [Column("version")]
+    public long Version { get; set; }
+
     public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
+    public ICollection<OrderStatusHistory> StatusHistory { get; set; } = new List<OrderStatusHistory>();
+    public ICollection<PaymentTransaction> Payments { get; set; } = new List<PaymentTransaction>();
+    public VoucherUsage? VoucherUsage { get; set; }
+}
+
+public static class OrderStatuses
+{
+    public const string Pending = "PENDING";
+    public const string Confirmed = "CONFIRMED";
+    public const string Completed = "COMPLETED";
+    public const string Cancelled = "CANCELLED";
+}
+
+public static class OrderTypes
+{
+    public const string Online = "ONLINE";
+    public const string Pos = "POS";
+}
+
+public static class PickupTypes
+{
+    public const string Shipping = "SHIPPING";
+    public const string StorePickup = "STORE_PICKUP";
 }
