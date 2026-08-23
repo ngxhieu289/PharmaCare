@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductSaleUnit> ProductSaleUnits => Set<ProductSaleUnit>();
     public DbSet<Batch> Batches => Set<Batch>();
     public DbSet<BranchInventory> BranchInventories => Set<BranchInventory>();
     public DbSet<Prescription> Prescriptions => Set<Prescription>();
@@ -41,10 +42,12 @@ public class AppDbContext : DbContext
 
         // --- CẤU HÌNH UNIQUE INDEX ---
         modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
+        modelBuilder.Entity<User>().HasIndex(u => u.Username).IsUnique();
         modelBuilder.Entity<Role>().HasIndex(r => r.Name).IsUnique();
         modelBuilder.Entity<Permission>().HasIndex(p => p.Code).IsUnique();
         modelBuilder.Entity<Branch>().HasIndex(b => b.Code).IsUnique();
         modelBuilder.Entity<Product>().HasIndex(p => p.Code).IsUnique();
+        modelBuilder.Entity<ProductSaleUnit>().HasIndex(u => new { u.ProductId, u.UnitName }).IsUnique();
         modelBuilder.Entity<Order>().HasIndex(o => o.Code).IsUnique();
         modelBuilder.Entity<Voucher>().HasIndex(v => v.Code).IsUnique();
         modelBuilder.Entity<RefreshToken>().HasIndex(t => t.TokenHash).IsUnique();
@@ -174,6 +177,18 @@ public class AppDbContext : DbContext
             .HasOne(p => p.Category)
             .WithMany()
             .HasForeignKey(p => p.CategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProductSaleUnit>()
+            .HasOne(u => u.Product)
+            .WithMany(p => p.SaleUnits)
+            .HasForeignKey(u => u.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<OrderItem>()
+            .HasOne(i => i.SaleUnit)
+            .WithMany()
+            .HasForeignKey(i => i.SaleUnitId)
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Batch>()
@@ -309,6 +324,7 @@ public class AppDbContext : DbContext
     {
         modelBuilder.Entity<Product>().Property(p => p.UnitPrice).HasPrecision(18, 2);
         modelBuilder.Entity<Product>().Property(p => p.VatRate).HasPrecision(5, 2);
+        modelBuilder.Entity<ProductSaleUnit>().Property(u => u.SalePrice).HasPrecision(18, 2);
         modelBuilder.Entity<Batch>().Property(b => b.CostPrice).HasPrecision(18, 2);
         modelBuilder.Entity<Order>().Property(o => o.SubtotalBeforeVat).HasPrecision(18, 2);
         modelBuilder.Entity<Order>().Property(o => o.TotalVatAmount).HasPrecision(18, 2);
@@ -343,8 +359,14 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<OrderItem>().ToTable("order_items", table =>
         {
             table.HasCheckConstraint("CK_order_items_quantity", "quantity > 0");
+            table.HasCheckConstraint("CK_order_items_sale_quantity", "sale_quantity > 0");
             table.HasCheckConstraint("CK_order_items_amounts", "unit_price >= 0 AND vat_amount >= 0 AND line_total >= 0");
             table.HasCheckConstraint("CK_order_items_vat_rate", "vat_rate >= 0 AND vat_rate <= 100");
+        });
+        modelBuilder.Entity<ProductSaleUnit>().ToTable("product_sale_units", table =>
+        {
+            table.HasCheckConstraint("CK_product_sale_units_conversion", "conversion_factor > 0");
+            table.HasCheckConstraint("CK_product_sale_units_price", "sale_price >= 0");
         });
         modelBuilder.Entity<Order>().ToTable("orders", table =>
             table.HasCheckConstraint("CK_orders_amounts", "subtotal_before_vat >= 0 AND total_vat_amount >= 0 AND shipping_fee >= 0 AND discount_amount >= 0 AND total_amount >= 0"));

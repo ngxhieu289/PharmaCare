@@ -17,7 +17,7 @@ public class BranchesController : ControllerBase
 
     public BranchesController(AppDbContext context) => _context = context;
 
-    [Authorize(Policy = PermissionCodes.BranchesRead)]
+    [AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<PagedResponse<BranchResponse>>> GetBranches(
         [FromQuery] string? search,
@@ -57,7 +57,7 @@ public class BranchesController : ControllerBase
         return Ok(PagedResponse<BranchResponse>.Create(items, page, pageSize, totalItems));
     }
 
-    [Authorize(Policy = PermissionCodes.BranchesRead)]
+    [AllowAnonymous]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<BranchResponse>> GetBranch(
         Guid id,

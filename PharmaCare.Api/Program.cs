@@ -9,11 +9,14 @@ using PharmaCare.Api.Authorization;
 using PharmaCare.Api.Data;
 using PharmaCare.Api.Entities;
 using PharmaCare.Api.Services;
+using PharmaCare.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsql => npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
 builder.Services.AddOptions<JwtSettings>()
     .Bind(builder.Configuration.GetSection(JwtSettings.SectionName))
@@ -24,6 +27,8 @@ builder.Services.AddOptions<JwtSettings>()
 
 builder.Services.AddOptions<BootstrapAdminSettings>()
     .Bind(builder.Configuration.GetSection(BootstrapAdminSettings.SectionName));
+builder.Services.AddOptions<DemoAccountsSettings>()
+    .Bind(builder.Configuration.GetSection(DemoAccountsSettings.SectionName));
 
 builder.Services.AddOptions<PrescriptionStorageSettings>()
     .Bind(builder.Configuration.GetSection(PrescriptionStorageSettings.SectionName))
@@ -72,6 +77,15 @@ builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddSingleton<IPrescriptionFileStorage, PrescriptionFileStorage>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
+{
+    if (allowedOrigins.Length > 0)
+    {
+        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+    }
+}));
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -98,8 +112,10 @@ using (var scope = app.Services.CreateScope())
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>();
     var bootstrapAdmin = scope.ServiceProvider
         .GetRequiredService<IOptions<BootstrapAdminSettings>>().Value;
+    var demoAccounts = scope.ServiceProvider
+        .GetRequiredService<IOptions<DemoAccountsSettings>>().Value;
     await context.Database.MigrateAsync();
-    await DbInitializer.SeedAsync(context, passwordHasher, bootstrapAdmin);
+    await DbInitializer.SeedAsync(context, passwordHasher, bootstrapAdmin, demoAccounts);
 }
 
 app.UseSwagger();
@@ -109,7 +125,9 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<MutationAuditMiddleware>();
 app.MapControllers();
 app.Run();

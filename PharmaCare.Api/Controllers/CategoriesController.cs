@@ -17,7 +17,7 @@ public class CategoriesController : ControllerBase
 
     public CategoriesController(AppDbContext context) => _context = context;
 
-    [Authorize(Policy = PermissionCodes.ProductsRead)]
+    [AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<PagedResponse<CategoryResponse>>> GetCategories(
         [FromQuery] string? search,
@@ -58,7 +58,7 @@ public class CategoriesController : ControllerBase
         return Ok(PagedResponse<CategoryResponse>.Create(items, page, pageSize, totalItems));
     }
 
-    [Authorize(Policy = PermissionCodes.ProductsRead)]
+    [AllowAnonymous]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<CategoryResponse>> GetCategory(
         Guid id,

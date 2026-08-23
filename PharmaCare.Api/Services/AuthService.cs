@@ -28,16 +28,16 @@ public sealed class AuthService : IAuthService
 
     public async Task<TokenResponse?> LoginAsync(LoginRequest request, string ipAddress)
     {
-        var email = NormalizeEmail(request.Email);
+        var identifier = request.Email.Trim().ToLowerInvariant();
         var user = await _context.Users
             .AsSplitQuery()
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
             .ThenInclude(r => r.RolePermissions)
             .ThenInclude(rp => rp.Permission)
-            .SingleOrDefaultAsync(u => u.Email == email);
+            .SingleOrDefaultAsync(u => u.Email == identifier || u.Username == identifier);
 
-        if (user is null || !user.IsActive)
+        if (user is null || !user.IsActive || user.IsGuest)
         {
             return null;
         }
@@ -61,7 +61,8 @@ public sealed class AuthService : IAuthService
     public async Task<TokenResponse?> RegisterAsync(RegisterRequest request, string ipAddress)
     {
         var email = NormalizeEmail(request.Email);
-        if (await _context.Users.AnyAsync(u => u.Email == email))
+        var username = request.Username.Trim().ToLowerInvariant();
+        if (await _context.Users.AnyAsync(u => u.Email == email || u.Username == username))
         {
             return null;
         }
@@ -78,6 +79,7 @@ public sealed class AuthService : IAuthService
         var user = new User
         {
             Email = email,
+            Username = username,
             DisplayName = request.DisplayName.Trim(),
             Phone = request.Phone?.Trim()
         };

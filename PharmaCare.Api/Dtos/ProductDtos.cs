@@ -8,6 +8,16 @@ public record ProductResponse(
     string Name,
     string? ActiveIngredient,
     string? Indications,
+    string? Brand,
+    string? RegistrationNumber,
+    string? DosageForm,
+    string? Manufacturer,
+    string? CountryOfOrigin,
+    string? ShelfLife,
+    string? Composition,
+    string? UsageInstructions,
+    string? Contraindications,
+    string? SideEffects,
     Guid CategoryId,
     string CategoryName,
     bool RxFlag,
@@ -16,7 +26,21 @@ public record ProductResponse(
     decimal UnitPrice,
     string? StorageTemp,
     string? WarningText,
-    bool IsActive);
+    string? ImageUrl,
+    bool IsActive,
+    IReadOnlyCollection<ProductSaleUnitResponse> SaleUnits);
+
+public record ProductSaleUnitResponse(
+    Guid Id, string UnitName, int ConversionFactor,
+    decimal SalePrice, bool IsDefault, bool IsActive);
+
+public record ProductAvailabilityResponse(
+    Guid ProductId,
+    Guid BranchId,
+    int AvailableQuantity,
+    string Status,
+    Guid? SaleUnitId = null,
+    string? UnitName = null);
 
 public sealed class SaveProductRequest
 {
@@ -31,6 +55,17 @@ public sealed class SaveProductRequest
 
     [MaxLength(500)]
     public string? Indications { get; set; }
+
+    [MaxLength(150)] public string? Brand { get; set; }
+    [MaxLength(100)] public string? RegistrationNumber { get; set; }
+    [MaxLength(150)] public string? DosageForm { get; set; }
+    [MaxLength(255)] public string? Manufacturer { get; set; }
+    [MaxLength(100)] public string? CountryOfOrigin { get; set; }
+    [MaxLength(100)] public string? ShelfLife { get; set; }
+    [MaxLength(2000)] public string? Composition { get; set; }
+    [MaxLength(2000)] public string? UsageInstructions { get; set; }
+    [MaxLength(2000)] public string? Contraindications { get; set; }
+    [MaxLength(2000)] public string? SideEffects { get; set; }
 
     public Guid CategoryId { get; set; }
     public bool RxFlag { get; set; }
@@ -49,4 +84,19 @@ public sealed class SaveProductRequest
 
     [MaxLength(1000)]
     public string? WarningText { get; set; }
+
+    [MaxLength(2048)]
+    public string? ImageUrl { get; set; }
+
+    [MinLength(1)]
+    public List<SaveProductSaleUnitRequest> SaleUnits { get; set; } = [];
+}
+
+public sealed class SaveProductSaleUnitRequest
+{
+    public Guid? Id { get; set; }
+    [Required, MinLength(1), MaxLength(30)] public string UnitName { get; set; } = string.Empty;
+    [Range(1, int.MaxValue)] public int ConversionFactor { get; set; } = 1;
+    [Range(typeof(decimal), "0.01", "9999999999999999.99")] public decimal SalePrice { get; set; }
+    public bool IsDefault { get; set; }
 }

@@ -51,7 +51,9 @@ public class ReportsController : ControllerBase
             Gross = g.Sum(o => o.TotalAmount),
             Refunded = g.Sum(o => o.PaymentStatus == PaymentStatuses.Refunded ? o.TotalAmount : 0m),
             Discount = g.Sum(o => o.DiscountAmount),
-            Vat = g.Sum(o => o.TotalVatAmount)
+            Vat = g.Sum(o => o.TotalVatAmount),
+            BeforeVat = g.Sum(o => o.SubtotalBeforeVat),
+            Shipping = g.Sum(o => o.ShippingFee)
         }).SingleOrDefaultAsync(cancellationToken);
 
         var inventory = ScopedInventory(branchId);
@@ -72,8 +74,11 @@ public class ReportsController : ControllerBase
 
         return Ok(new DashboardResponse(
             new ReportPeriod(range.From, range.To), total, completedCount, cancelled,
+            financial?.BeforeVat ?? 0m,
+            (financial?.BeforeVat ?? 0m) + (financial?.Vat ?? 0m),
             gross, refunded, gross - refunded, financial?.Discount ?? 0m,
-            financial?.Vat ?? 0m, completedCount == 0 ? 0 : Math.Round(gross / completedCount, 2),
+            financial?.Vat ?? 0m, financial?.Shipping ?? 0m,
+            completedCount == 0 ? 0 : Math.Round(gross / completedCount, 2),
             pendingRx, lowStock, expiring, statusCounts));
     }
 
@@ -94,11 +99,13 @@ public class ReportsController : ControllerBase
             {
                 Date = g.Key, Count = g.Count(), Gross = g.Sum(o => o.TotalAmount),
                 Refunded = g.Sum(o => o.PaymentStatus == PaymentStatuses.Refunded ? o.TotalAmount : 0m),
-                Discount = g.Sum(o => o.DiscountAmount)
+                Discount = g.Sum(o => o.DiscountAmount), BeforeVat = g.Sum(o => o.SubtotalBeforeVat),
+                Vat = g.Sum(o => o.TotalVatAmount), Shipping = g.Sum(o => o.ShippingFee)
             }).OrderBy(x => x.Date).ToListAsync(cancellationToken);
         return Ok(rows.Select(x => new DailySalesResponse(
             DateOnly.FromDateTime(x.Date), x.Count, x.Gross, x.Refunded,
-            x.Gross - x.Refunded, x.Discount)).ToArray());
+            x.Gross - x.Refunded, x.Discount, x.BeforeVat, x.Vat,
+            x.BeforeVat + x.Vat, x.Shipping)).ToArray());
     }
 
     [HttpGet("sales/by-branch")]
@@ -118,11 +125,14 @@ public class ReportsController : ControllerBase
                 g.Key.BranchId, g.Key.Code, g.Key.Name, Count = g.Count(),
                 Gross = g.Sum(o => o.TotalAmount),
                 Refunded = g.Sum(o => o.PaymentStatus == PaymentStatuses.Refunded ? o.TotalAmount : 0m),
-                Net = g.Sum(o => o.PaymentStatus == PaymentStatuses.Refunded ? 0m : o.TotalAmount)
+                Net = g.Sum(o => o.PaymentStatus == PaymentStatuses.Refunded ? 0m : o.TotalAmount),
+                BeforeVat = g.Sum(o => o.SubtotalBeforeVat), Vat = g.Sum(o => o.TotalVatAmount),
+                Discount = g.Sum(o => o.DiscountAmount), Shipping = g.Sum(o => o.ShippingFee)
             })
             .OrderBy(x => x.Code).ToListAsync(cancellationToken);
         return Ok(rows.Select(x => new BranchSalesResponse(
-            x.BranchId, x.Code, x.Name, x.Count, x.Gross, x.Refunded, x.Net)).ToArray());
+            x.BranchId, x.Code, x.Name, x.Count, x.Gross, x.Refunded, x.Net,
+            x.BeforeVat, x.Vat, x.BeforeVat + x.Vat, x.Discount, x.Shipping)).ToArray());
     }
 
     [HttpGet("products/top")]

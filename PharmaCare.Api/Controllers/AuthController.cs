@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PharmaCare.Api.DTOs.Auth;
 using PharmaCare.Api.Services;
+using Microsoft.EntityFrameworkCore;
+using PharmaCare.Api.Data;
 
 namespace PharmaCare.Api.Controllers;
 
@@ -11,7 +13,12 @@ namespace PharmaCare.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _auth;
-    public AuthController(IAuthService auth) => _auth = auth;
+    private readonly AppDbContext _context;
+    public AuthController(IAuthService auth, AppDbContext context)
+    {
+        _auth = auth;
+        _context = context;
+    }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
@@ -60,4 +67,42 @@ public class AuthController : ControllerBase
             ? Ok(new { message = "Password changed. Please sign in again." })
             : BadRequest(new { error = "Current password is incorrect" });
     }
+
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var user = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == userId && u.IsActive)
+            .Select(u => new CurrentUserResponse(
+                u.Id, u.Email, u.Username, u.DisplayName, u.Phone,
+                u.UserRoles.Select(ur => ur.Role.Name).Distinct().OrderBy(name => name).ToArray(),
+                u.UserRoles.SelectMany(ur => ur.Role.RolePermissions)
+                    .Select(rp => rp.Permission.Code).Distinct().OrderBy(code => code).ToArray(),
+                u.UserBranches.OrderByDescending(ub => ub.IsPrimary).ThenBy(ub => ub.Branch.Name)
+                    .Select(ub => new CurrentUserBranchResponse(
+                        ub.BranchId, ub.Branch.Code, ub.Branch.Name, ub.IsPrimary)).ToArray()))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return user is null ? Unauthorized() : Ok(user);
+    }
+
+    [Authorize]
+    [HttpPut("me")]
+    public async Task<IActionResult> UpdateMe(UpdateProfileRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        var user = await _context.Users.FindAsync([userId], cancellationToken);
+        if (user is null || !user.IsActive) return Unauthorized();
+
+        user.DisplayName = request.DisplayName.Trim();
+        user.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        await _context.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    private bool TryGetUserId(out Guid userId) =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
 }

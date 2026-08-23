@@ -6,6 +6,7 @@ using PharmaCare.Api.Data;
 using PharmaCare.Api.Dtos;
 using PharmaCare.Api.Entities;
 using PharmaCare.Api.Authorization;
+using PharmaCare.Api.Dtos.Common;
 
 namespace PharmaCare.Api.Controllers;
 
@@ -23,23 +24,37 @@ public class UsersController : ControllerBase
     // GET: api/users (Lấy danh sách Người dùng + Roles)
     [Authorize(Policy = PermissionCodes.UsersRead)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<UserResponse>>> GetUsers()
+    public async Task<ActionResult<PagedResponse<UserResponse>>> GetUsers(
+        [FromQuery] string? search,
+        [FromQuery] bool? isActive,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
-        var users = await _context.Users
-            .Include(u => u.UserRoles)
-            .ThenInclude(ur => ur.Role)
-            .Select(u => new UserResponse(
-                u.Id,
-                u.Email,
-                u.DisplayName,
-                u.Phone,
-                u.IsActive,
-                u.CreatedAt,
-                u.UserRoles.Select(ur => ur.Role.Name).ToList()
-            ))
-            .ToListAsync();
+        (page, pageSize) = Pagination.Normalize(page, pageSize);
+        var query = _context.Users.AsNoTracking().AsQueryable();
+        if (isActive.HasValue) query = query.Where(u => u.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{search.Trim()}%";
+            query = query.Where(u => EF.Functions.ILike(u.Email, pattern) ||
+                                     EF.Functions.ILike(u.DisplayName, pattern) ||
+                                     (u.Phone != null && EF.Functions.ILike(u.Phone, pattern)));
+        }
 
-        return Ok(users);
+        var totalItems = await query.CountAsync(cancellationToken);
+        var users = await Project(query.OrderByDescending(u => u.CreatedAt))
+            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        return Ok(PagedResponse<UserResponse>.Create(users, page, pageSize, totalItems));
+    }
+
+    [Authorize(Policy = PermissionCodes.UsersRead)]
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<UserResponse>> GetUser(Guid id, CancellationToken cancellationToken)
+    {
+        var user = await Project(_context.Users.AsNoTracking().Where(u => u.Id == id))
+            .SingleOrDefaultAsync(cancellationToken);
+        return user is null ? NotFound() : Ok(user);
     }
 
     // POST: api/users (Tạo User mới + Hash Mật khẩu)
@@ -74,10 +89,48 @@ public class UsersController : ControllerBase
             user.Phone,
             user.IsActive,
             user.CreatedAt,
-            Array.Empty<string>()
+            Array.Empty<string>(),
+            Array.Empty<UserBranchResponse>()
         );
 
-        return CreatedAtAction(nameof(GetUsers), new { id = user.Id }, response);
+        return CreatedAtAction(nameof(GetUser), new { id = user.Id }, response);
+    }
+
+    [Authorize(Policy = PermissionCodes.UsersManage)]
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> UpdateUser(Guid id, UpdateUserRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _context.Users.FindAsync([id], cancellationToken);
+        if (user is null) return NotFound();
+        user.DisplayName = request.DisplayName.Trim();
+        user.Phone = Clean(request.Phone);
+        await _context.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [Authorize(Policy = PermissionCodes.UsersManage)]
+    [HttpPatch("{id:guid}/status")]
+    public async Task<IActionResult> SetStatus(Guid id, SetActiveRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _context.Users.FindAsync([id], cancellationToken);
+        if (user is null) return NotFound();
+
+        var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!request.IsActive && currentUserId == id.ToString())
+        {
+            return Conflict(new { message = "Không thể tự khóa tài khoản đang đăng nhập." });
+        }
+
+        user.IsActive = request.IsActive;
+        if (!request.IsActive)
+        {
+            var tokens = await _context.RefreshTokens
+                .Where(t => t.UserId == id && t.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var token in tokens) token.RevokedAt = DateTimeOffset.UtcNow;
+        }
+        await _context.SaveChangesAsync(cancellationToken);
+        return NoContent();
     }
 
         // PUT: api/users/{userId}/roles/{roleId} (Gán Role cho User)
@@ -125,7 +178,9 @@ public class UsersController : ControllerBase
     [HttpPut("{userId}/branches/{branchId}")]
     public async Task<IActionResult> AssignBranch(Guid userId, Guid branchId, [FromQuery] bool isPrimary = false)
     {
-        if (!await _context.Users.AnyAsync(u => u.Id == userId))
+        var user = await _context.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+            .SingleOrDefaultAsync(u => u.Id == userId);
+        if (user is null)
         {
             return NotFound(new { message = "Không tìm thấy User" });
         }
@@ -138,6 +193,14 @@ public class UsersController : ControllerBase
         var assignments = await _context.UserBranches
             .Where(ub => ub.UserId == userId)
             .ToListAsync();
+
+        var isBranchManager = user.UserRoles.Any(ur => ur.Role.Name == "BranchManager");
+        if (isBranchManager)
+        {
+            _context.UserBranches.RemoveRange(assignments.Where(ub => ub.BranchId != branchId));
+            assignments = assignments.Where(ub => ub.BranchId == branchId).ToList();
+            isPrimary = true;
+        }
 
         var assignment = assignments.SingleOrDefault(ub => ub.BranchId == branchId);
         if (assignment is null)
@@ -173,4 +236,15 @@ public class UsersController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+    private static IQueryable<UserResponse> Project(IQueryable<User> query) =>
+        query.Select(u => new UserResponse(
+            u.Id, u.Email, u.DisplayName, u.Phone, u.IsActive, u.CreatedAt,
+            u.UserRoles.Select(ur => ur.Role.Name).OrderBy(name => name).ToArray(),
+            u.UserBranches.OrderByDescending(ub => ub.IsPrimary).ThenBy(ub => ub.Branch.Name)
+                .Select(ub => new UserBranchResponse(ub.BranchId, ub.Branch.Code, ub.Branch.Name, ub.IsPrimary))
+                .ToArray()));
+
+    private static string? Clean(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

@@ -5,6 +5,7 @@ namespace PharmaCare.Api.Dtos;
 public sealed class CreateOrderItemRequest
 {
     public Guid ProductId { get; set; }
+    public Guid? SaleUnitId { get; set; }
 
     [Range(1, int.MaxValue)]
     public int Quantity { get; set; }
@@ -34,11 +35,49 @@ public sealed class CreateOrderRequest
     [MaxLength(20)]
     public string? RecipientPhone { get; set; }
 
+    [EmailAddress, MaxLength(150)]
+    public string? GuestEmail { get; set; }
+
     [MaxLength(500)]
     public string? ShippingAddress { get; set; }
 
     [MinLength(1)]
     public List<CreateOrderItemRequest> Items { get; set; } = [];
+}
+
+public sealed class GuestCheckoutRequest
+{
+    [Required, MinLength(2), MaxLength(100)]
+    public string CustomerName { get; set; } = string.Empty;
+
+    [Required, MaxLength(20)]
+    public string Phone { get; set; } = string.Empty;
+
+    [EmailAddress, MaxLength(150)]
+    public string? Email { get; set; }
+
+    [Required]
+    public CreateOrderRequest Order { get; set; } = new();
+}
+
+public sealed class WalkInCheckoutRequest
+{
+    [Required, MinLength(2), MaxLength(100)]
+    public string CustomerName { get; set; } = "Khách lẻ";
+
+    [MaxLength(20)]
+    public string? Phone { get; set; }
+
+    public bool HasPhysicalPrescription { get; set; }
+
+    [MaxLength(100)]
+    public string? PatientName { get; set; }
+
+    [MaxLength(1000)]
+    public string? PharmacistNote { get; set; }
+
+    [Required]
+    public CreateOrderRequest Order { get; set; } = new();
 }
 
 public sealed class ChangeOrderStatusRequest
@@ -76,6 +115,9 @@ public record OrderItemResponse(
     string BatchNumber,
     DateOnly ExpiryDate,
     int Quantity,
+    int BaseQuantity,
+    Guid? SaleUnitId,
+    string SaleUnitName,
     decimal UnitPrice,
     decimal VatRate,
     decimal VatAmount,
@@ -110,6 +152,7 @@ public record OrderResponse(
     string PaymentStatus,
     string? RecipientName,
     string? RecipientPhone,
+    string? GuestEmail,
     string? ShippingAddress,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,

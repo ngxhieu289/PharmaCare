@@ -367,6 +367,11 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("discount_amount");
 
+                    b.Property<string>("GuestEmail")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("guest_email");
+
                     b.Property<string>("OrderType")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -504,6 +509,20 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
 
+                    b.Property<int>("SaleQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("sale_quantity");
+
+                    b.Property<Guid?>("SaleUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sale_unit_id");
+
+                    b.Property<string>("SaleUnitName")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("sale_unit_name");
+
                     b.Property<decimal>("UnitPrice")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
@@ -523,6 +542,8 @@ namespace PharmaCare.Api.Migrations
 
                     b.HasIndex("OrderId");
 
+                    b.HasIndex("SaleUnitId");
+
                     b.HasIndex("ProductId", "BatchId");
 
                     b.ToTable("order_items", null, t =>
@@ -530,6 +551,8 @@ namespace PharmaCare.Api.Migrations
                             t.HasCheckConstraint("CK_order_items_amounts", "unit_price >= 0 AND vat_amount >= 0 AND line_total >= 0");
 
                             t.HasCheckConstraint("CK_order_items_quantity", "quantity > 0");
+
+                            t.HasCheckConstraint("CK_order_items_sale_quantity", "sale_quantity > 0");
 
                             t.HasCheckConstraint("CK_order_items_vat_rate", "vat_rate >= 0 AND vat_rate <= 100");
                         });
@@ -802,6 +825,11 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("active_ingredient");
 
+                    b.Property<string>("Brand")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("brand");
+
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid")
                         .HasColumnName("category_id");
@@ -812,6 +840,31 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("code");
 
+                    b.Property<string>("Composition")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("composition");
+
+                    b.Property<string>("Contraindications")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("contraindications");
+
+                    b.Property<string>("CountryOfOrigin")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("country_of_origin");
+
+                    b.Property<string>("DosageForm")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("dosage_form");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("image_url");
+
                     b.Property<string>("Indications")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -820,6 +873,11 @@ namespace PharmaCare.Api.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<string>("Manufacturer")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("manufacturer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -832,9 +890,24 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("text")
                         .HasColumnName("packaging");
 
+                    b.Property<string>("RegistrationNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("registration_number");
+
                     b.Property<bool>("RxFlag")
                         .HasColumnType("boolean")
                         .HasColumnName("rx_flag");
+
+                    b.Property<string>("ShelfLife")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("shelf_life");
+
+                    b.Property<string>("SideEffects")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("side_effects");
 
                     b.Property<string>("StorageTemp")
                         .HasColumnType("text")
@@ -844,6 +917,11 @@ namespace PharmaCare.Api.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("unit_price");
+
+                    b.Property<string>("UsageInstructions")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("usage_instructions");
 
                     b.Property<decimal>("VatRate")
                         .HasPrecision(5, 2)
@@ -866,6 +944,53 @@ namespace PharmaCare.Api.Migrations
                             t.HasCheckConstraint("CK_products_unit_price", "unit_price >= 0");
 
                             t.HasCheckConstraint("CK_products_vat_rate", "vat_rate >= 0 AND vat_rate <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.ProductSaleUnit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("ConversionFactor")
+                        .HasColumnType("integer")
+                        .HasColumnName("conversion_factor");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("SalePrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("sale_price");
+
+                    b.Property<string>("UnitName")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("unit_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId", "UnitName")
+                        .IsUnique();
+
+                    b.ToTable("product_sale_units", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_product_sale_units_conversion", "conversion_factor > 0");
+
+                            t.HasCheckConstraint("CK_product_sale_units_price", "sale_price >= 0");
                         });
                 });
 
@@ -994,6 +1119,10 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsGuest")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_guest");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1004,9 +1133,17 @@ namespace PharmaCare.Api.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("phone");
 
+                    b.Property<string>("Username")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("username");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("Username")
                         .IsUnique();
 
                     b.ToTable("users");
@@ -1336,6 +1473,11 @@ namespace PharmaCare.Api.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("PharmaCare.Api.Entities.ProductSaleUnit", "SaleUnit")
+                        .WithMany()
+                        .HasForeignKey("SaleUnitId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PharmaCare.Api.Entities.Batch", "Batch")
                         .WithMany()
                         .HasForeignKey("ProductId", "BatchId")
@@ -1348,6 +1490,8 @@ namespace PharmaCare.Api.Migrations
                     b.Navigation("Order");
 
                     b.Navigation("Product");
+
+                    b.Navigation("SaleUnit");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.OrderStatusHistory", b =>
@@ -1442,6 +1586,17 @@ namespace PharmaCare.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.ProductSaleUnit", b =>
+                {
+                    b.HasOne("PharmaCare.Api.Entities.Product", "Product")
+                        .WithMany("SaleUnits")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.RefreshToken", b =>
@@ -1578,6 +1733,11 @@ namespace PharmaCare.Api.Migrations
             modelBuilder.Entity("PharmaCare.Api.Entities.Prescription", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("PharmaCare.Api.Entities.Product", b =>
+                {
+                    b.Navigation("SaleUnits");
                 });
 
             modelBuilder.Entity("PharmaCare.Api.Entities.Role", b =>

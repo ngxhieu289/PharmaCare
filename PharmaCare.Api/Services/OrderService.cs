@@ -44,7 +44,7 @@ public sealed class OrderService : IOrderService
             throw new OrderOperationException("Chi nhánh không tồn tại hoặc đã ngừng hoạt động.");
         }
 
-        var requestedProducts = request.Items.Select(i => i.ProductId).ToArray();
+        var requestedProducts = request.Items.Select(i => i.ProductId).Distinct().ToArray();
         var products = await _context.Products
             .Where(p => requestedProducts.Contains(p.Id) && p.IsActive)
             .ToDictionaryAsync(p => p.Id, cancellationToken);
@@ -52,9 +52,18 @@ public sealed class OrderService : IOrderService
         {
             throw new OrderOperationException("Có sản phẩm không tồn tại hoặc đã ngừng bán.");
         }
+        var requestedUnitIds = request.Items.Where(item => item.SaleUnitId.HasValue)
+            .Select(item => item.SaleUnitId!.Value).Distinct().ToArray();
+        var saleUnits = await _context.ProductSaleUnits
+            .Where(unit => requestedUnitIds.Contains(unit.Id) && unit.IsActive)
+            .ToDictionaryAsync(unit => unit.Id, cancellationToken);
+        if (saleUnits.Count != requestedUnitIds.Length)
+        {
+            throw new OrderOperationException("Có đơn vị bán không tồn tại hoặc đã ngừng sử dụng.");
+        }
 
         await ValidatePrescription(
-            request, customerId, products, cancellationToken);
+            request, customerId, products, saleUnits, cancellationToken);
 
         await using var transaction = await _context.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, cancellationToken);
@@ -73,6 +82,7 @@ public sealed class OrderService : IOrderService
                 PaymentStatus = PaymentStatuses.Unpaid,
                 RecipientName = Clean(request.RecipientName),
                 RecipientPhone = Clean(request.RecipientPhone),
+                GuestEmail = Clean(request.GuestEmail),
                 ShippingAddress = Clean(request.ShippingAddress),
                 ShippingFee = pickupType == PickupTypes.Shipping ? _settings.ShippingFee : 0m,
                 Version = 1
@@ -86,6 +96,24 @@ public sealed class OrderService : IOrderService
             foreach (var requestedItem in request.Items)
             {
                 var product = products[requestedItem.ProductId];
+                ProductSaleUnit saleUnit;
+                if (requestedItem.SaleUnitId.HasValue)
+                {
+                    saleUnit = saleUnits[requestedItem.SaleUnitId.Value];
+                    if (saleUnit.ProductId != product.Id)
+                        throw new OrderOperationException("Đơn vị bán không thuộc sản phẩm đã chọn.");
+                }
+                else
+                {
+                    saleUnit = await _context.ProductSaleUnits.SingleOrDefaultAsync(
+                        unit => unit.ProductId == product.Id && unit.IsDefault && unit.IsActive,
+                        cancellationToken) ?? new ProductSaleUnit
+                        {
+                            Id = Guid.Empty,
+                            ProductId = product.Id, UnitName = product.Packaging.Split(' ')[0],
+                            ConversionFactor = 1, SalePrice = product.UnitPrice, IsDefault = true
+                        };
+                }
                 var remaining = requestedItem.Quantity;
                 var inventoryRows = await _context.BranchInventories
                     .Include(i => i.Batch)
@@ -100,15 +128,17 @@ public sealed class OrderService : IOrderService
                 foreach (var inventory in inventoryRows)
                 {
                     if (remaining == 0) break;
-                    var allocated = Math.Min(
-                        remaining, inventory.QuantityOnHand - inventory.ReservedQuantity);
+                    var availableSaleUnits = (inventory.QuantityOnHand - inventory.ReservedQuantity) /
+                                             saleUnit.ConversionFactor;
+                    var allocated = Math.Min(remaining, availableSaleUnits);
                     if (allocated <= 0) continue;
+                    var allocatedBaseQuantity = checked(allocated * saleUnit.ConversionFactor);
 
-                    inventory.ReservedQuantity += allocated;
+                    inventory.ReservedQuantity += allocatedBaseQuantity;
                     inventory.Version++;
                     remaining -= allocated;
 
-                    var grossLine = RoundMoney(product.UnitPrice * allocated);
+                    var grossLine = RoundMoney(saleUnit.SalePrice * allocated);
                     var baseLine = product.VatRate == 0
                         ? grossLine
                         : RoundMoney(grossLine / (1m + product.VatRate / 100m));
@@ -118,14 +148,17 @@ public sealed class OrderService : IOrderService
                     {
                         ProductId = product.Id,
                         BatchId = inventory.BatchId,
-                        Quantity = allocated,
-                        UnitPrice = product.UnitPrice,
+                        Quantity = allocatedBaseQuantity,
+                        SaleUnitId = saleUnit.Id == Guid.Empty ? null : saleUnit.Id,
+                        SaleUnitName = saleUnit.UnitName,
+                        SaleQuantity = allocated,
+                        UnitPrice = saleUnit.SalePrice,
                         VatRate = product.VatRate,
                         VatAmount = vatLine,
                         LineTotal = grossLine
                     });
                     AddInventoryTransaction(
-                        inventory, InventoryTransactionTypes.Reserve, allocated,
+                        inventory, InventoryTransactionTypes.Reserve, allocatedBaseQuantity,
                         actorId, order.Id, order.Code);
 
                     subtotalBeforeVat += baseLine;
@@ -344,6 +377,7 @@ public sealed class OrderService : IOrderService
         CreateOrderRequest request,
         Guid customerId,
         IReadOnlyDictionary<Guid, Product> products,
+        IReadOnlyDictionary<Guid, ProductSaleUnit> saleUnits,
         CancellationToken cancellationToken)
     {
         var rxItems = request.Items.Where(i => products[i.ProductId].RxFlag).ToList();
@@ -367,24 +401,28 @@ public sealed class OrderService : IOrderService
                 "Prescription không hợp lệ, chưa được duyệt hoặc không thuộc khách hàng/chi nhánh.");
         }
 
-        foreach (var requestedItem in rxItems)
+        foreach (var requestedGroup in rxItems.GroupBy(item => item.ProductId))
         {
+            var productId = requestedGroup.Key;
             var approved = prescription.Items
-                .SingleOrDefault(i => i.ProductId == requestedItem.ProductId);
+                .SingleOrDefault(i => i.ProductId == productId);
             if (approved is null)
             {
                 throw new OrderOperationException("Prescription không duyệt một trong các thuốc Rx đã chọn.");
             }
 
             var alreadyOrdered = await _context.OrderItems
-                .Where(i => i.ProductId == requestedItem.ProductId &&
+                .Where(i => i.ProductId == productId &&
                             i.Order!.PrescriptionId == prescription.Id &&
                             i.Order.Status != OrderStatuses.Cancelled)
                 .SumAsync(i => (int?)i.Quantity, cancellationToken) ?? 0;
-            if (alreadyOrdered + requestedItem.Quantity > approved.ApprovedQuantity)
+            var requestedBaseQuantity = requestedGroup.Sum(requestedItem => checked(
+                requestedItem.Quantity * (requestedItem.SaleUnitId.HasValue
+                    ? saleUnits[requestedItem.SaleUnitId.Value].ConversionFactor : 1)));
+            if (alreadyOrdered + requestedBaseQuantity > approved.ApprovedQuantity)
             {
                 throw new OrderOperationException(
-                    $"Số lượng thuốc {products[requestedItem.ProductId].Code} vượt mức được duyệt.");
+                    $"Số lượng thuốc {products[productId].Code} vượt mức được duyệt.");
             }
         }
     }
@@ -398,8 +436,6 @@ public sealed class OrderService : IOrderService
     {
         if (request.Items.Count == 0 || request.Items.Any(i => i.ProductId == Guid.Empty))
             throw new OrderOperationException("Đơn hàng phải có ít nhất một sản phẩm hợp lệ.");
-        if (request.Items.Select(i => i.ProductId).Distinct().Count() != request.Items.Count)
-            throw new OrderOperationException("Danh sách đặt hàng có sản phẩm bị trùng.");
         if (orderType is not (OrderTypes.Online or OrderTypes.Pos))
             throw new OrderOperationException("Loại đơn hàng không hợp lệ.");
         if (orderType == OrderTypes.Pos && (!canManageOrders || !request.CustomerId.HasValue))

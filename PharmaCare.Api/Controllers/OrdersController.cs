@@ -8,6 +8,7 @@ using PharmaCare.Api.Dtos;
 using PharmaCare.Api.Dtos.Common;
 using PharmaCare.Api.Entities;
 using PharmaCare.Api.Services;
+using Microsoft.AspNetCore.Identity;
 
 namespace PharmaCare.Api.Controllers;
 
@@ -19,15 +20,146 @@ public class OrdersController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IOrderService _orderService;
     private readonly IBranchAccessService _branchAccess;
+    private readonly IPasswordHasher<User> _passwordHasher;
 
     public OrdersController(
         AppDbContext context,
         IOrderService orderService,
-        IBranchAccessService branchAccess)
+        IBranchAccessService branchAccess,
+        IPasswordHasher<User> passwordHasher)
     {
         _context = context;
         _orderService = orderService;
         _branchAccess = branchAccess;
+        _passwordHasher = passwordHasher;
+    }
+
+    [AllowAnonymous]
+    [HttpPost("guest")]
+    public async Task<ActionResult<OrderResponse>> CreateGuestOrder(
+        GuestCheckoutRequest request,
+        CancellationToken cancellationToken)
+    {
+        var productIds = request.Order.Items.Select(item => item.ProductId).Distinct().ToArray();
+        if (productIds.Length == 0)
+        {
+            return BadRequest(new { message = "Giỏ hàng đang trống." });
+        }
+        if (await _context.Products.AnyAsync(
+                product => productIds.Contains(product.Id) && product.RxFlag,
+                cancellationToken))
+        {
+            return Unauthorized(new { message = "Thuốc kê đơn yêu cầu đăng nhập và đơn thuốc đã duyệt." });
+        }
+
+        var guest = new User
+        {
+            Email = $"guest-{Guid.NewGuid():N}@guest.pharmacare.local",
+            DisplayName = request.CustomerName.Trim(),
+            Phone = request.Phone.Trim(),
+            IsGuest = true,
+            IsActive = true
+        };
+        guest.PasswordHash = _passwordHasher.HashPassword(guest, Guid.NewGuid().ToString("N"));
+        _context.Users.Add(guest);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        request.Order.OrderType = OrderTypes.Online;
+        request.Order.CustomerId = null;
+        request.Order.GuestEmail = string.IsNullOrWhiteSpace(request.Email)
+            ? null : request.Email.Trim().ToLowerInvariant();
+        request.Order.RecipientName ??= guest.DisplayName;
+        request.Order.RecipientPhone ??= guest.Phone;
+
+        try
+        {
+            var id = await _orderService.CreateAsync(request.Order, guest.Id, false, cancellationToken);
+            var response = await Project(_context.Orders.AsNoTracking().Where(order => order.Id == id))
+                .SingleAsync(cancellationToken);
+            return CreatedAtAction(nameof(GetOrder), new { id }, response);
+        }
+        catch (OrderOperationException exception)
+        {
+            _context.ChangeTracker.Clear();
+            await _context.Users.Where(user => user.Id == guest.Id).ExecuteDeleteAsync(cancellationToken);
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
+    [Authorize(Policy = PermissionCodes.OrdersManage)]
+    [HttpPost("pos/walk-in")]
+    public async Task<ActionResult<OrderResponse>> CreateWalkInOrder(
+        WalkInCheckoutRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var pharmacistId)) return Unauthorized();
+        if (!await _branchAccess.CanAccessAsync(User, request.Order.BranchId, cancellationToken))
+            return Forbid();
+        var productIds = request.Order.Items.Select(item => item.ProductId).Distinct().ToArray();
+        var products = await _context.Products.Where(item => productIds.Contains(item.Id) && item.IsActive)
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+        if (products.Count != productIds.Length)
+            return BadRequest(new { message = "Có sản phẩm không tồn tại hoặc đã ngừng bán." });
+        var containsRx = products.Values.Any(item => item.RxFlag);
+        if (containsRx && (!request.HasPhysicalPrescription || string.IsNullOrWhiteSpace(request.PatientName)))
+            return Conflict(new { message = "Thuốc kê đơn yêu cầu dược sĩ kiểm tra đơn giấy và nhập tên bệnh nhân." });
+        var customer = new User
+        {
+            Email = $"walkin-{Guid.NewGuid():N}@guest.pharmacare.local",
+            DisplayName = request.CustomerName.Trim(), Phone = Clean(request.Phone),
+            IsGuest = true, IsActive = true
+        };
+        customer.PasswordHash = _passwordHasher.HashPassword(customer, Guid.NewGuid().ToString("N"));
+        _context.Users.Add(customer);
+        await _context.SaveChangesAsync(cancellationToken);
+        Prescription? prescription = null;
+        if (containsRx)
+        {
+            var unitIds = request.Order.Items.Where(item => item.SaleUnitId.HasValue)
+                .Select(item => item.SaleUnitId!.Value).Distinct().ToArray();
+            var units = await _context.ProductSaleUnits.Where(item => unitIds.Contains(item.Id))
+                .ToDictionaryAsync(item => item.Id, cancellationToken);
+            prescription = new Prescription
+            {
+                CustomerId = customer.Id, BranchId = request.Order.BranchId,
+                ImageUrl = "IN_STORE_PHYSICAL_PRESCRIPTION",
+                PatientName = request.PatientName!.Trim(), Status = PrescriptionStatuses.Approved,
+                PharmacistId = pharmacistId,
+                PharmacistNote = Clean(request.PharmacistNote) ?? "Dược sĩ đã kiểm tra đơn thuốc bản giấy tại quầy.",
+                ReviewedAt = DateTimeOffset.UtcNow, Version = 1
+            };
+            foreach (var group in request.Order.Items.GroupBy(item => item.ProductId))
+            {
+                prescription.Items.Add(new PrescriptionItem
+                {
+                    ProductId = group.Key,
+                    ApprovedQuantity = group.Sum(item => checked(item.Quantity *
+                        (item.SaleUnitId.HasValue && units.TryGetValue(item.SaleUnitId.Value, out var unit)
+                            ? unit.ConversionFactor : 1))),
+                    Dosage = "Theo đơn thuốc bản giấy khách xuất trình tại quầy",
+                    Instructions = prescription.PharmacistNote
+                });
+            }
+            _context.Prescriptions.Add(prescription);
+            await _context.SaveChangesAsync(cancellationToken);
+            request.Order.PrescriptionId = prescription.Id;
+        }
+        request.Order.OrderType = OrderTypes.Pos;
+        request.Order.CustomerId = customer.Id;
+        request.Order.PickupType = PickupTypes.StorePickup;
+        try
+        {
+            var id = await _orderService.CreateAsync(request.Order, customer.Id, true, cancellationToken);
+            var response = await Project(_context.Orders.AsNoTracking().Where(order => order.Id == id)).SingleAsync(cancellationToken);
+            return CreatedAtAction(nameof(GetOrder), new { id }, response);
+        }
+        catch (OrderOperationException exception)
+        {
+            _context.ChangeTracker.Clear();
+            if (prescription is not null)
+                await _context.Prescriptions.Where(item => item.Id == prescription.Id).ExecuteDeleteAsync(cancellationToken);
+            await _context.Users.Where(user => user.Id == customer.Id).ExecuteDeleteAsync(cancellationToken);
+            return Conflict(new { message = exception.Message });
+        }
     }
 
     [HttpGet]
@@ -241,6 +373,9 @@ public class OrdersController : ControllerBase
     private bool TryGetUserId(out Guid userId) =>
         Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
 
+    private static string? Clean(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private static bool IsValidStatus(string status) =>
         status is OrderStatuses.Pending or OrderStatuses.Confirmed or
             OrderStatuses.Completed or OrderStatuses.Cancelled;
@@ -253,13 +388,14 @@ public class OrdersController : ControllerBase
             o.SubtotalBeforeVat, o.TotalVatAmount, o.ShippingFee,
             o.DiscountAmount, o.TotalAmount, o.VoucherCode,
             o.PaymentMethod, o.PaymentStatus,
-            o.RecipientName, o.RecipientPhone, o.ShippingAddress,
+            o.RecipientName, o.RecipientPhone, o.GuestEmail, o.ShippingAddress,
             o.CreatedAt, o.UpdatedAt,
             o.OrderItems.OrderBy(i => i.Product!.Name).ThenBy(i => i.Batch!.ExpiryDate)
                 .Select(i => new OrderItemResponse(
                     i.Id, i.ProductId, i.Product!.Code, i.Product.Name,
                     i.BatchId, i.Batch!.BatchNumber, i.Batch.ExpiryDate,
-                    i.Quantity, i.UnitPrice, i.VatRate, i.VatAmount, i.LineTotal))
+                    i.SaleQuantity, i.Quantity, i.SaleUnitId, i.SaleUnitName,
+                    i.UnitPrice, i.VatRate, i.VatAmount, i.LineTotal))
                 .ToArray(),
             o.StatusHistory.OrderBy(h => h.ChangedAt)
                 .Select(h => new OrderStatusHistoryResponse(

@@ -9,11 +9,14 @@ public record DashboardResponse(
     int TotalOrders,
     int CompletedOrders,
     int CancelledOrders,
+    decimal RevenueBeforeVat,
+    decimal SalesIncludingVat,
     decimal GrossSales,
     decimal RefundedAmount,
     decimal NetRevenue,
     decimal DiscountAmount,
     decimal VatAmount,
+    decimal ShippingRevenue,
     decimal AverageOrderValue,
     int PendingPrescriptions,
     int LowStockRows,
@@ -22,7 +25,9 @@ public record DashboardResponse(
 
 public record DailySalesResponse(
     DateOnly Date, int OrderCount, decimal GrossSales,
-    decimal RefundedAmount, decimal NetRevenue, decimal DiscountAmount);
+    decimal RefundedAmount, decimal NetRevenue, decimal DiscountAmount,
+    decimal RevenueBeforeVat, decimal VatAmount, decimal SalesIncludingVat,
+    decimal ShippingRevenue);
 
 public record TopProductResponse(
     Guid ProductId, string ProductCode, string ProductName,
@@ -30,7 +35,9 @@ public record TopProductResponse(
 
 public record BranchSalesResponse(
     Guid BranchId, string BranchCode, string BranchName,
-    int OrderCount, decimal GrossSales, decimal RefundedAmount, decimal NetRevenue);
+    int OrderCount, decimal GrossSales, decimal RefundedAmount, decimal NetRevenue,
+    decimal RevenueBeforeVat, decimal VatAmount, decimal SalesIncludingVat,
+    decimal DiscountAmount, decimal ShippingRevenue);
 
 public record InventoryAlertResponse(
     Guid BranchId, string BranchCode, Guid ProductId, string ProductCode,

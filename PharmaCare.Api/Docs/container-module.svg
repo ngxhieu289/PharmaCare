@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<style>text{font-family:Arial,sans-serif;fill:#17324d}.t{font-size:26px;font-weight:bold}.h{font-size:18px;font-weight:bold}.b{font-size:15px}.box{fill:#eef4fa;stroke:#2e74b5;stroke-width:2}.mod{fill:#fff;stroke:#7894ad;stroke-width:2}.db{fill:#fff6df;stroke:#b18418;stroke-width:2}.arr{stroke:#365f7d;stroke-width:2;marker-end:url(#a)}</style><defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#365f7d"/></marker></defs>
+<text x="600" y="38" text-anchor="middle" class="t">Container &amp; Module View</text>
+<rect x="50" y="85" width="240" height="100" rx="12" class="box"/><text x="170" y="125" text-anchor="middle" class="h">Web/Mobile Clients</text><text x="170" y="153" text-anchor="middle" class="b">HTTPS + JSON + JWT</text>
+<rect x="350" y="65" width="580" height="585" rx="18" class="box"/><text x="640" y="105" text-anchor="middle" class="h">PharmaCare.Api — Modular Monolith</text>
+<rect x="390" y="135" width="220" height="80" rx="10" class="mod"/><text x="500" y="170" text-anchor="middle" class="h">Auth &amp; RBAC</text><text x="500" y="194" text-anchor="middle" class="b">JWT, refresh, policy</text>
+<rect x="670" y="135" width="220" height="80" rx="10" class="mod"/><text x="780" y="170" text-anchor="middle" class="h">Catalog</text><text x="780" y="194" text-anchor="middle" class="b">Category, product, branch</text>
+<rect x="390" y="245" width="220" height="80" rx="10" class="mod"/><text x="500" y="280" text-anchor="middle" class="h">Inventory</text><text x="500" y="304" text-anchor="middle" class="b">Batch, FEFO, ledger</text>
+<rect x="670" y="245" width="220" height="80" rx="10" class="mod"/><text x="780" y="280" text-anchor="middle" class="h">Prescription</text><text x="780" y="304" text-anchor="middle" class="b">Upload, review, approval</text>
+<rect x="390" y="355" width="220" height="80" rx="10" class="mod"/><text x="500" y="390" text-anchor="middle" class="h">Order</text><text x="500" y="414" text-anchor="middle" class="b">Pricing, reserve, lifecycle</text>
+<rect x="670" y="355" width="220" height="80" rx="10" class="mod"/><text x="780" y="390" text-anchor="middle" class="h">Voucher &amp; Payment</text><text x="780" y="414" text-anchor="middle" class="b">Redeem, payment ledger</text>
+<rect x="390" y="465" width="220" height="80" rx="10" class="mod"/><text x="500" y="500" text-anchor="middle" class="h">Reporting</text><text x="500" y="524" text-anchor="middle" class="b">Revenue, alerts, top items</text>
+<rect x="670" y="465" width="220" height="80" rx="10" class="mod"/><text x="780" y="500" text-anchor="middle" class="h">Audit</text><text x="780" y="524" text-anchor="middle" class="b">Actor, entity, JSON diff</text>
+<rect x="480" y="570" width="320" height="55" rx="10" class="mod"/><text x="640" y="604" text-anchor="middle" class="h">EF Core / AppDbContext</text>
+<rect x="990" y="195" width="170" height="110" rx="12" class="db"/><text x="1075" y="240" text-anchor="middle" class="h">PostgreSQL</text><text x="1075" y="270" text-anchor="middle" class="b">ACID + constraints</text>
+<rect x="990" y="395" width="170" height="110" rx="12" class="db"/><text x="1075" y="440" text-anchor="middle" class="h">File Storage</text><text x="1075" y="470" text-anchor="middle" class="b">Private images</text>
+<line x1="290" y1="135" x2="350" y2="135" class="arr"/><line x1="640" y1="545" x2="640" y2="570" class="arr"/><line x1="930" y1="250" x2="990" y2="250" class="arr"/><line x1="890" y1="285" x2="990" y2="430" class="arr"/>
+</svg>

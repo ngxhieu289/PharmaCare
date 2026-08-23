@@ -72,6 +72,10 @@ public class Order
     [Column("recipient_phone")]
     public string? RecipientPhone { get; set; }
 
+    [MaxLength(150)]
+    [Column("guest_email")]
+    public string? GuestEmail { get; set; }
+
     [MaxLength(500)]
     [Column("shipping_address")]
     public string? ShippingAddress { get; set; }
