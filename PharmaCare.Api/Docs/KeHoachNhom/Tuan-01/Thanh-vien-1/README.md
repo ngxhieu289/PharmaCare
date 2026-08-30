@@ -1,4 +1,4 @@
-# Tuần 1 - Thành viên 1 (Trưởng nhóm)
+# Tuần 1 - Nguyễn Xuân Hiếu
 
 - Thời gian: 30/08/2026 - 05/09/2026
 - Branch: `feat/tv1-w1-auth-hardening`
@@ -13,7 +13,7 @@
 - [x] Kiểm tra Swagger và tài khoản demo.
 - [x] Cập nhật README hướng dẫn chạy backend/frontend.
 
-## File dự kiến
+## Phạm vi mã nguồn phụ trách
 
 ```text
 Program.cs
@@ -26,16 +26,13 @@ Controllers/AuthController.cs
 README.md
 ```
 
-## Minh chứng phải đẩy
+## Minh chứng
 
-- Ảnh Swagger mở thành công.
-- Ảnh hoặc log đăng nhập và refresh thành công.
-- Log `dotnet build` và `dotnet test`.
-- Link commit và Pull Request.
-
-Kết quả kiểm thử dạng văn bản được lưu tại `TEST_RESULTS.md`. Trước khi tạo Pull
-Request, trưởng nhóm chụp thêm Swagger trên máy của mình để làm minh chứng giao
-diện, không chụp token hoặc mật khẩu.
+- Swagger hoạt động thành công với HTTP 200.
+- Đăng nhập, refresh token rotation và revoke token đều kiểm thử thành công.
+- `dotnet build` hoàn thành với 0 lỗi và 0 cảnh báo.
+- Kết quả kiểm thử chi tiết được lưu tại [`TEST_RESULTS.md`](./TEST_RESULTS.md).
+- Commit và Pull Request được liên kết trong phần kết quả thực tế bên dưới.
 
 ## Kết quả thực tế
 
