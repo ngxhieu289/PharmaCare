@@ -50,6 +50,6 @@ diện, không chụp token hoặc mật khẩu.
   công trên database tạm; Swagger HTTP 200; 10 kiểm tra ranh giới role đạt;
   11 kiểm tra login/token-version/refresh/replay/revoke đạt; frontend lint và
   production build đạt.
-- Link commit: điền sau khi thực hiện bước commit thủ công.
-- Link Pull Request: điền sau khi tạo Pull Request vào `develop`.
-- Việc còn lại: chụp ảnh Swagger, commit, push và tạo Pull Request.
+- Link commit: https://github.com/ngxhieu289/PharmaCare/commit/8a60324cdee455b300f3443644609259cfb2545b
+- Link Pull Request: https://github.com/ngxhieu289/PharmaCare/pull/3
+- Việc còn lại: Không còn công việc mã nguồn trong phạm vi Tuần 1.
