@@ -16,6 +16,10 @@ public class User
     [Column("email")]
     public string Email { get; set; } = string.Empty;
 
+    [MaxLength(50)]
+    [Column("username")]
+    public string? Username { get; set; }
+
     [Required]
     [Column("password_hash")]
     public string PasswordHash { get; set; } = string.Empty;
@@ -32,9 +36,14 @@ public class User
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
 
+    [Column("is_guest")]
+    public bool IsGuest { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     // Quan hệ
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public ICollection<UserBranch> UserBranches { get; set; } = new List<UserBranch>();
 }

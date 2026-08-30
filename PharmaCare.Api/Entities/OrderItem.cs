@@ -20,9 +20,20 @@ public class OrderItem
 
     [Column("batch_id")]
     public Guid BatchId { get; set; } // Lô xuất theo FIFO
+    public Batch? Batch { get; set; }
 
     [Column("quantity")]
     public int Quantity { get; set; }
+
+    [Column("sale_unit_id")]
+    public Guid? SaleUnitId { get; set; }
+    public ProductSaleUnit? SaleUnit { get; set; }
+
+    [Required, MaxLength(30), Column("sale_unit_name")]
+    public string SaleUnitName { get; set; } = string.Empty;
+
+    [Column("sale_quantity")]
+    public int SaleQuantity { get; set; }
 
     [Column("unit_price")]
     public decimal UnitPrice { get; set; }

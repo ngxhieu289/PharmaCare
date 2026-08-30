@@ -40,4 +40,6 @@ public class Branch
 
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
+
+    public ICollection<UserBranch> UserBranches { get; set; } = new List<UserBranch>();
 }

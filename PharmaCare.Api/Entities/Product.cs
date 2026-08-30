@@ -26,6 +26,36 @@ public class Product
     [Column("indications")]
     public string? Indications { get; set; } // Triệu chứng: Đau đầu, sốt, cảm cúm
 
+    [MaxLength(150), Column("brand")]
+    public string? Brand { get; set; }
+
+    [MaxLength(100), Column("registration_number")]
+    public string? RegistrationNumber { get; set; }
+
+    [MaxLength(150), Column("dosage_form")]
+    public string? DosageForm { get; set; }
+
+    [MaxLength(255), Column("manufacturer")]
+    public string? Manufacturer { get; set; }
+
+    [MaxLength(100), Column("country_of_origin")]
+    public string? CountryOfOrigin { get; set; }
+
+    [MaxLength(100), Column("shelf_life")]
+    public string? ShelfLife { get; set; }
+
+    [MaxLength(2000), Column("composition")]
+    public string? Composition { get; set; }
+
+    [MaxLength(2000), Column("usage_instructions")]
+    public string? UsageInstructions { get; set; }
+
+    [MaxLength(2000), Column("contraindications")]
+    public string? Contraindications { get; set; }
+
+    [MaxLength(2000), Column("side_effects")]
+    public string? SideEffects { get; set; }
+
     [Column("category_id")]
     public Guid CategoryId { get; set; }
     public Category? Category { get; set; }
@@ -48,6 +78,12 @@ public class Product
     [Column("warning_text")]
     public string? WarningText { get; set; }
 
+    [MaxLength(2048)]
+    [Column("image_url")]
+    public string? ImageUrl { get; set; }
+
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
+
+    public ICollection<ProductSaleUnit> SaleUnits { get; set; } = new List<ProductSaleUnit>();
 }

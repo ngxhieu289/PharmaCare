@@ -20,4 +20,9 @@ public class Category
 
     [Column("parent_id")]
     public Guid? ParentId { get; set; }
+    public Category? Parent { get; set; }
+    public ICollection<Category> Children { get; set; } = new List<Category>();
+
+    [Column("is_active")]
+    public bool IsActive { get; set; } = true;
 }

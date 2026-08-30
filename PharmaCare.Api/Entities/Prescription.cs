@@ -12,6 +12,11 @@ public class Prescription
 
     [Column("customer_id")]
     public Guid CustomerId { get; set; }
+    public User? Customer { get; set; }
+
+    [Column("branch_id")]
+    public Guid BranchId { get; set; }
+    public Branch? Branch { get; set; }
 
     [Required, MaxLength(500)]
     [Column("image_url")]
@@ -27,10 +32,26 @@ public class Prescription
 
     [Column("pharmacist_id")]
     public Guid? PharmacistId { get; set; }
+    public User? Pharmacist { get; set; }
 
     [Column("pharmacist_note")]
     public string? PharmacistNote { get; set; } // Ghi chú liều dùng của Dược sĩ
 
     [Column("reviewed_at")]
     public DateTimeOffset? ReviewedAt { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    [Column("version")]
+    public long Version { get; set; }
+
+    public ICollection<PrescriptionItem> Items { get; set; } = new List<PrescriptionItem>();
+}
+
+public static class PrescriptionStatuses
+{
+    public const string Pending = "PENDING";
+    public const string Approved = "APPROVED";
+    public const string Rejected = "REJECTED";
 }

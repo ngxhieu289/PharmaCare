@@ -27,5 +27,17 @@ public record UserResponse(
     string? Phone,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    IReadOnlyCollection<string> Roles
+    IReadOnlyCollection<string> Roles,
+    IReadOnlyCollection<UserBranchResponse> Branches
 );
+
+public record UserBranchResponse(Guid Id, string Code, string Name, bool IsPrimary);
+
+public sealed class UpdateUserRequest
+{
+    [Required, MinLength(2), MaxLength(100)]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [MaxLength(20)]
+    public string? Phone { get; set; }
+}
