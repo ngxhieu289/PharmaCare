@@ -1,1 +1,4 @@
 Storage/Prescriptions/*
+
+# Local frontend configuration (bank account, API URLs and other machine-specific values)
+pharmacare-frontend/.env.local

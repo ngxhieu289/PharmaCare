@@ -14,6 +14,7 @@ import Orders from '@/pages/Customer/Orders'
 import OrderDetail from '@/pages/Customer/OrderDetail'
 import Profile from '@/pages/Customer/Profile'
 import OrderSuccess from '@/pages/Customer/OrderSuccess'
+import TrackOrder from '@/pages/Customer/TrackOrder'
 import InternalHome from '@/pages/Internal/Home'
 import InternalPrescriptions from '@/pages/Internal/Prescriptions'
 import InternalOrders from '@/pages/Internal/Orders'
@@ -40,6 +41,7 @@ export default function App() {
       <Route path="cart" element={<Cart />} />
       <Route path="checkout" element={<Checkout />} />
       <Route path="order-success" element={<OrderSuccess />} />
+      <Route path="track-order" element={<TrackOrder />} />
       <Route path="prescriptions" element={<RequireAuth><RequirePortal portal="customer"><Prescriptions /></RequirePortal></RequireAuth>} />
       <Route path="orders" element={<RequireAuth><RequirePortal portal="customer"><Orders /></RequirePortal></RequireAuth>} />
       <Route path="orders/:id" element={<RequireAuth><RequirePortal portal="customer"><OrderDetail /></RequirePortal></RequireAuth>} />

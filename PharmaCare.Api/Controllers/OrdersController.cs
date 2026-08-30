@@ -86,6 +86,24 @@ public class OrdersController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
+    [HttpGet("guest/track")]
+    public async Task<ActionResult<OrderResponse>> TrackGuestOrder(
+        [FromQuery] TrackGuestOrderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var code = request.Code.Trim().ToUpperInvariant();
+        var phone = request.Phone.Trim();
+        var query = _context.Orders.AsNoTracking().Where(order =>
+            order.Code == code &&
+            order.Customer!.IsGuest &&
+            (order.RecipientPhone == phone || order.Customer.Phone == phone));
+        var response = await Project(query).SingleOrDefaultAsync(cancellationToken);
+        return response is null
+            ? NotFound(new { message = "Không tìm thấy đơn hàng phù hợp với mã đơn và số điện thoại." })
+            : Ok(response);
+    }
+
     [Authorize(Policy = PermissionCodes.OrdersManage)]
     [HttpPost("pos/walk-in")]
     public async Task<ActionResult<OrderResponse>> CreateWalkInOrder(
@@ -383,7 +401,8 @@ public class OrdersController : ControllerBase
     private static IQueryable<OrderResponse> Project(IQueryable<Order> query) =>
         query.Select(o => new OrderResponse(
             o.Id, o.Code, o.CustomerId, o.Customer!.DisplayName,
-            o.BranchId, o.Branch!.Code, o.PrescriptionId,
+            o.BranchId, o.Branch!.Code, o.Branch.Name, o.Branch.Address, o.Branch.Phone,
+            o.PrescriptionId,
             o.OrderType, o.PickupType, o.Status,
             o.SubtotalBeforeVat, o.TotalVatAmount, o.ShippingFee,
             o.DiscountAmount, o.TotalAmount, o.VoucherCode,

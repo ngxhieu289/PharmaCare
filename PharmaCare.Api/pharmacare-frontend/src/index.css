@@ -6,3 +6,14 @@
   body { @apply m-0 bg-slate-50 text-slate-800 antialiased; }
   button, input { @apply focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2; }
 }
+
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  body { background: white !important; color: black !important; }
+  body * { visibility: hidden !important; }
+  #printable-invoice, #printable-invoice * { visibility: visible !important; }
+  #printable-invoice { display: block !important; position: absolute; inset: 0; width: 100%; padding: 0; }
+  #printable-invoice table { page-break-inside: auto; }
+  #printable-invoice tr { page-break-inside: avoid; page-break-after: auto; }
+  #printable-invoice thead { display: table-header-group; }
+}

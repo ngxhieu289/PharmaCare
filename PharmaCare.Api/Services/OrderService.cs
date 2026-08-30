@@ -546,6 +546,10 @@ public sealed class OrderService : IOrderService
         var voucher = await _context.Vouchers.SingleOrDefaultAsync(
             v => v.Code == code, cancellationToken)
             ?? throw new OrderOperationException("Voucher không tồn tại.");
+        var customer = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == customerId)
+            .Select(u => new { u.IsGuest, u.Phone })
+            .SingleAsync(cancellationToken);
         if (!voucher.IsActive || voucher.ValidFrom > now ||
             (voucher.ValidUntil.HasValue && voucher.ValidUntil <= now))
             throw new OrderOperationException("Voucher đã hết hạn hoặc chưa có hiệu lực.");
@@ -556,9 +560,15 @@ public sealed class OrderService : IOrderService
         if (voucher.UsageLimit.HasValue && voucher.UsedCount >= voucher.UsageLimit)
             throw new OrderOperationException("Voucher đã hết lượt sử dụng.");
 
-        var customerUsage = await _context.VoucherUsages.CountAsync(
-            u => u.VoucherId == voucher.Id && u.CustomerId == customerId &&
-                 u.Status == VoucherUsageStatuses.Redeemed, cancellationToken);
+        if (customer.IsGuest && string.IsNullOrWhiteSpace(customer.Phone))
+            throw new OrderOperationException("Khách vãng lai cần nhập số điện thoại để sử dụng voucher.");
+
+        var usages = _context.VoucherUsages.Where(
+            u => u.VoucherId == voucher.Id && u.Status == VoucherUsageStatuses.Redeemed);
+        usages = customer.IsGuest
+            ? usages.Where(u => u.Customer.IsGuest && u.Customer.Phone == customer.Phone)
+            : usages.Where(u => u.CustomerId == customerId);
+        var customerUsage = await usages.CountAsync(cancellationToken);
         if (customerUsage >= voucher.PerCustomerLimit)
             throw new OrderOperationException("Khách hàng đã dùng hết lượt của voucher.");
 

@@ -94,20 +94,40 @@ public class VouchersController : ControllerBase
         return NoContent();
     }
 
+    [AllowAnonymous]
     [HttpGet("validate/{code}")]
     public async Task<ActionResult<VoucherValidationResponse>> ValidateCode(
-        string code, [FromQuery] decimal orderAmount, CancellationToken cancellationToken)
+        string code,
+        [FromQuery] decimal orderAmount,
+        [FromQuery] string? customerPhone,
+        CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var customerId))
-            return Unauthorized();
+        Guid? customerId = null;
+        var phone = string.IsNullOrWhiteSpace(customerPhone) ? null : customerPhone.Trim();
+        if (phone is null &&
+            Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var authenticatedCustomerId))
+        {
+            customerId = authenticatedCustomerId;
+        }
+        if (!customerId.HasValue && phone is null)
+        {
+            return Ok(new VoucherValidationResponse(
+                code.Trim().ToUpperInvariant(), false, 0,
+                "Khách vãng lai cần nhập số điện thoại để sử dụng voucher."));
+        }
+
         var voucher = await _context.Vouchers.AsNoTracking()
             .SingleOrDefaultAsync(v => v.Code == code.Trim().ToUpper(), cancellationToken);
         var message = GetInvalidReason(voucher, customerId, orderAmount, DateTimeOffset.UtcNow);
         if (message is not null)
             return Ok(new VoucherValidationResponse(code.ToUpperInvariant(), false, 0, message));
-        var used = await _context.VoucherUsages.CountAsync(
-            u => u.VoucherId == voucher!.Id && u.CustomerId == customerId &&
-                 u.Status == VoucherUsageStatuses.Redeemed, cancellationToken);
+
+        var usages = _context.VoucherUsages.AsNoTracking().Where(
+            u => u.VoucherId == voucher!.Id && u.Status == VoucherUsageStatuses.Redeemed);
+        usages = customerId.HasValue
+            ? usages.Where(u => u.CustomerId == customerId.Value)
+            : usages.Where(u => u.Customer.IsGuest && u.Customer.Phone == phone);
+        var used = await usages.CountAsync(cancellationToken);
         if (used >= voucher!.PerCustomerLimit)
             return Ok(new VoucherValidationResponse(voucher.Code, false, 0, "Đã hết lượt dùng của khách hàng."));
         var discount = voucher.DiscountType == VoucherDiscountTypes.Percentage
@@ -136,7 +156,7 @@ public class VouchersController : ControllerBase
         return null;
     }
 
-    private static string? GetInvalidReason(Voucher? voucher, Guid customerId, decimal amount, DateTimeOffset now)
+    private static string? GetInvalidReason(Voucher? voucher, Guid? customerId, decimal amount, DateTimeOffset now)
     {
         if (voucher is null) return "Voucher không tồn tại.";
         if (!voucher.IsActive || voucher.ValidFrom > now ||

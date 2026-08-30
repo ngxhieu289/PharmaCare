@@ -60,6 +60,15 @@ public sealed class GuestCheckoutRequest
     public CreateOrderRequest Order { get; set; } = new();
 }
 
+public sealed class TrackGuestOrderRequest
+{
+    [Required, MaxLength(30)]
+    public string Code { get; set; } = string.Empty;
+
+    [Required, MaxLength(20)]
+    public string Phone { get; set; } = string.Empty;
+}
+
 public sealed class WalkInCheckoutRequest
 {
     [Required, MinLength(2), MaxLength(100)]
@@ -138,6 +147,9 @@ public record OrderResponse(
     string CustomerName,
     Guid BranchId,
     string BranchCode,
+    string BranchName,
+    string BranchAddress,
+    string? BranchPhone,
     Guid? PrescriptionId,
     string OrderType,
     string PickupType,

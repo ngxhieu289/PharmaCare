@@ -46,7 +46,8 @@ export interface PaymentTransaction { id: string; transactionType: string; metho
 export interface OrderItem { id: string; productId: string; productCode: string; productName: string; batchId: string; batchNumber: string; expiryDate: string; quantity: number; baseQuantity: number; saleUnitId: string | null; saleUnitName: string; unitPrice: number; vatRate: number; vatAmount: number; lineTotal: number }
 export interface OrderStatusHistory { fromStatus: string | null; toStatus: string; note: string | null; changedBy: string; changedByName: string; changedAt: string }
 export interface OrderResponse {
-  id: string; code: string; customerId: string; customerName: string; branchId: string; branchCode: string; prescriptionId: string | null
+  id: string; code: string; customerId: string; customerName: string; branchId: string; branchCode: string
+  branchName: string; branchAddress: string; branchPhone: string | null; prescriptionId: string | null
   orderType: string; pickupType: string; status: string; subtotalBeforeVat: number; totalVatAmount: number
   shippingFee: number; discountAmount: number; totalAmount: number; voucherCode: string | null
   paymentMethod: string; paymentStatus: string; recipientName: string | null; recipientPhone: string | null; guestEmail: string | null
