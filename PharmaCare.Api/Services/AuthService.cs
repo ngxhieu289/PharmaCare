@@ -12,17 +12,20 @@ public sealed class AuthService : IAuthService
     private readonly AppDbContext _context;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly ITokenService _tokenService;
+    private readonly IUserSessionService _userSessionService;
     private readonly JwtSettings _jwtSettings;
 
     public AuthService(
         AppDbContext context,
         IPasswordHasher<User> passwordHasher,
         ITokenService tokenService,
+        IUserSessionService userSessionService,
         IOptions<JwtSettings> jwtSettings)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
+        _userSessionService = userSessionService;
         _jwtSettings = jwtSettings.Value;
     }
 
@@ -105,15 +108,44 @@ public sealed class AuthService : IAuthService
             .ThenInclude(rp => rp.Permission)
             .SingleOrDefaultAsync(t => t.TokenHash == tokenHash);
 
-        if (storedToken is null || !storedToken.IsActive || !storedToken.User.IsActive)
+        if (storedToken is null || !storedToken.User.IsActive)
         {
             return null;
         }
 
+        // Một refresh token đã được rotate mà xuất hiện lần nữa là dấu hiệu bị phát lại.
+        // Thu hồi toàn bộ phiên của người dùng để chặn cả token thay thế đã bị đánh cắp.
+        if (!storedToken.IsActive)
+        {
+            if (storedToken.RevokedAt.HasValue &&
+                !string.IsNullOrWhiteSpace(storedToken.ReplacedByTokenHash))
+            {
+                await _userSessionService.InvalidateUserAsync(storedToken.User, ipAddress);
+                await _context.SaveChangesAsync();
+            }
+            return null;
+        }
+
         var newRefreshToken = _tokenService.GenerateRefreshToken();
-        storedToken.RevokedAt = DateTimeOffset.UtcNow;
-        storedToken.RevokedByIp = ipAddress;
-        storedToken.ReplacedByTokenHash = _tokenService.HashRefreshToken(newRefreshToken);
+        var replacementHash = _tokenService.HashRefreshToken(newRefreshToken);
+        var now = DateTimeOffset.UtcNow;
+        var rotated = await _context.RefreshTokens
+            .Where(token => token.Id == storedToken.Id &&
+                            token.RevokedAt == null &&
+                            token.ExpiresAt > now)
+            .ExecuteUpdateAsync(updates => updates
+                .SetProperty(token => token.RevokedAt, now)
+                .SetProperty(token => token.RevokedByIp, ipAddress)
+                .SetProperty(token => token.ReplacedByTokenHash, replacementHash));
+
+        // Chỉ một request được phép rotate một refresh token. Request đồng thời
+        // hoặc phát lại sẽ làm mất hiệu lực toàn bộ phiên của tài khoản.
+        if (rotated != 1)
+        {
+            await _userSessionService.InvalidateUserAsync(storedToken.User, ipAddress);
+            await _context.SaveChangesAsync();
+            return null;
+        }
 
         var roles = GetRoles(storedToken.User);
         var permissions = GetPermissions(storedToken.User);
@@ -149,15 +181,7 @@ public sealed class AuthService : IAuthService
         }
 
         user.PasswordHash = _passwordHasher.HashPassword(user, newPassword);
-        var activeTokens = await _context.RefreshTokens
-            .Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > DateTimeOffset.UtcNow)
-            .ToListAsync();
-
-        foreach (var token in activeTokens)
-        {
-            token.RevokedAt = DateTimeOffset.UtcNow;
-        }
-
+        await _userSessionService.InvalidateUserAsync(user);
         await _context.SaveChangesAsync();
         return true;
     }

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -13,9 +14,17 @@ using PharmaCare.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Database connection is missing. Set ConnectionStrings__DefaultConnection " +
+        "in the local environment; do not commit database passwords to appsettings files.");
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
+        connectionString,
         npgsql => npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
 builder.Services.AddOptions<JwtSettings>()
@@ -58,6 +67,32 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key)),
             ClockSkew = TimeSpan.FromSeconds(30)
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                var versionValue = context.Principal?.FindFirstValue(TokenClaimTypes.TokenVersion);
+                if (!Guid.TryParse(userIdValue, out var userId) ||
+                    !int.TryParse(versionValue, out var tokenVersion))
+                {
+                    context.Fail("Access token is missing its security version.");
+                    return;
+                }
+
+                var dbContext = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var currentUser = await dbContext.Users.AsNoTracking()
+                    .Where(user => user.Id == userId)
+                    .Select(user => new { user.IsActive, user.TokenVersion })
+                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+
+                if (currentUser is null || !currentUser.IsActive ||
+                    currentUser.TokenVersion != tokenVersion)
+                {
+                    context.Fail("This access token is no longer valid.");
+                }
+            }
+        };
     });
 
 builder.Services.AddAuthorization(options =>
@@ -71,6 +106,7 @@ builder.Services.AddAuthorization(options =>
 });
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IBranchAccessService, BranchAccessService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
