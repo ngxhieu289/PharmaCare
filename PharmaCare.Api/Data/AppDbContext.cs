@@ -43,6 +43,7 @@ public class AppDbContext : DbContext
         // --- CẤU HÌNH UNIQUE INDEX ---
         modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
         modelBuilder.Entity<User>().HasIndex(u => u.Username).IsUnique();
+        modelBuilder.Entity<User>().Property(u => u.TokenVersion).HasDefaultValue(1);
         modelBuilder.Entity<Role>().HasIndex(r => r.Name).IsUnique();
         modelBuilder.Entity<Permission>().HasIndex(p => p.Code).IsUnique();
         modelBuilder.Entity<Branch>().HasIndex(b => b.Code).IsUnique();

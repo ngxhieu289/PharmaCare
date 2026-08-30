@@ -7,6 +7,7 @@ using PharmaCare.Api.Dtos;
 using PharmaCare.Api.Entities;
 using PharmaCare.Api.Authorization;
 using PharmaCare.Api.Dtos.Common;
+using PharmaCare.Api.Services;
 
 namespace PharmaCare.Api.Controllers;
 
@@ -15,10 +16,12 @@ namespace PharmaCare.Api.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IUserSessionService _userSessionService;
 
-    public UsersController(AppDbContext context)
+    public UsersController(AppDbContext context, IUserSessionService userSessionService)
     {
         _context = context;
+        _userSessionService = userSessionService;
     }
 
     // GET: api/users (Lấy danh sách Người dùng + Roles)
@@ -121,13 +124,13 @@ public class UsersController : ControllerBase
             return Conflict(new { message = "Không thể tự khóa tài khoản đang đăng nhập." });
         }
 
-        user.IsActive = request.IsActive;
-        if (!request.IsActive)
+        if (user.IsActive != request.IsActive)
         {
-            var tokens = await _context.RefreshTokens
-                .Where(t => t.UserId == id && t.RevokedAt == null)
-                .ToListAsync(cancellationToken);
-            foreach (var token in tokens) token.RevokedAt = DateTimeOffset.UtcNow;
+            user.IsActive = request.IsActive;
+            await _userSessionService.InvalidateUserAsync(
+                user,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                cancellationToken);
         }
         await _context.SaveChangesAsync(cancellationToken);
         return NoContent();
@@ -151,6 +154,9 @@ public class UsersController : ControllerBase
         if (!userRoleExists)
         {
             _context.UserRoles.Add(new UserRole { UserId = userId, RoleId = roleId });
+            await _userSessionService.InvalidateUserAsync(
+                user,
+                HttpContext.Connection.RemoteIpAddress?.ToString());
             await _context.SaveChangesAsync();
         }
 
@@ -167,7 +173,13 @@ public class UsersController : ControllerBase
 
         if (userRole == null) return NotFound();
 
+        var user = await _context.Users.FindAsync(userId);
+        if (user is null) return NotFound();
+
         _context.UserRoles.Remove(userRole);
+        await _userSessionService.InvalidateUserAsync(
+            user,
+            HttpContext.Connection.RemoteIpAddress?.ToString());
         await _context.SaveChangesAsync();
 
         return NoContent();

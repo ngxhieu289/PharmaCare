@@ -5,6 +5,7 @@ using PharmaCare.Api.Data;
 using PharmaCare.Api.Entities;
 using PharmaCare.Api.Authorization;
 using PharmaCare.Api.Dtos;
+using PharmaCare.Api.Services;
 
 namespace PharmaCare.Api.Controllers;
 
@@ -13,10 +14,12 @@ namespace PharmaCare.Api.Controllers;
 public class RolesController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IUserSessionService _userSessionService;
 
-    public RolesController(AppDbContext context)
+    public RolesController(AppDbContext context, IUserSessionService userSessionService)
     {
         _context = context;
+        _userSessionService = userSessionService;
     }
 
     // GET: api/roles (Lấy danh sách 5 Roles mặc định + Permissions)
@@ -106,6 +109,9 @@ public class RolesController : ControllerBase
         {
             role.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permissionId });
         }
+        await _userSessionService.InvalidateRoleMembersAsync(
+            role.Id,
+            HttpContext.Connection.RemoteIpAddress?.ToString());
         await _context.SaveChangesAsync();
         return NoContent();
     }

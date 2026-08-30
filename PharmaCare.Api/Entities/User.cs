@@ -39,6 +39,11 @@ public class User
     [Column("is_guest")]
     public bool IsGuest { get; set; }
 
+    // Tăng giá trị này khi mật khẩu, trạng thái hoặc quyền của người dùng thay đổi.
+    // Access token mang phiên bản cũ sẽ bị từ chối ngay cả khi chưa hết hạn.
+    [Column("token_version")]
+    public int TokenVersion { get; set; } = 1;
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
